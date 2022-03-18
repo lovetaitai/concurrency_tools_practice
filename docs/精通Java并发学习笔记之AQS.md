@@ -1,23 +1,19 @@
+# AQS
 
-
-# 1. LockSupport 工具类
+## 1. LockSupport 工具类
 
 `LockSupport`工具类的主要作用是**挂起**和**唤醒**线程，是创建锁和其他同步类的基本线程阻塞原语，即很多锁和同步类的线程阻塞和唤醒都是通过`LockSupport`实现的，是 `wait()`和`notify()`的改良版。
 
-
-
-## 1.1 LockSupport 的诞生
+### 1.1 LockSupport 的诞生
 
 > 为什么已经有了 `wait/notify`和`await/signal`，还要搞一个 `LockSupport` ？
 
-Object 的`wait/notify` 的使用有两个限制，代码示例见[Github]()
+Object 的`wait/notify` 的使用有两个限制，代码示例见[Github](精通Java并发学习笔记之AQS.md)
 
 1. 必须在 synchronized 同步块中调用，否则会报 IllegalMonitorStateException。因为 `wait`方法要释放锁，当然必须先拥有对象锁 monitor
 2. `notify`必须在`wait`之后执行，否则`wait`的线程会一直被挂起，无法继续执行
 
-
-
-Condition 的`await/signal`的使用也有两个限制，代码示例见[Github]()
+Condition 的`await/signal`的使用也有两个限制，代码示例见[Github](精通Java并发学习笔记之AQS.md)
 
 1. 必须在 Lock 块中调用，否则会报 IllegalMonitorStateException。因为 `await`方法要释放锁，当然必须先拥有锁
 2. `signal`必须在`await`之后执行，否则`await`的线程会一直被挂起，无法继续执行
@@ -26,22 +22,14 @@ Condition 的`await/signal`的使用也有两个限制，代码示例见[Github]
 
 因为 Object 和 Condition 对线程的挂起和唤醒有一些限制，所以引入了更为方便的 LockSupport。
 
-
-
-## 1.2 LockSupport 的使用
+### 1.2 LockSupport 的使用
 
 LockSupport 是一个线程阻塞工具类，所有的方法都是静态方法，可以让线程在任意位置阻塞，可以在任意位置唤醒指定的线程，LockSupport 是使用 Unsafe 类实现的，下面介绍 LockSupport 中的几个重要方法：
 
-1. `static void park()`  挂起线程
-
+1. `static void park()` 挂起线程
 2. `static void unPark(Thread thread)` 唤醒指定线程
-
 3. `static void park(long nanos)` 挂起线程，到达指定时间仍未被唤醒，则自动唤醒线程
-
-
-
-
-1. `LockSupport.park()`
+4. `LockSupport.park()`
 
 下面是 `LockSupport.park()`的使用示例，不需要在同步块中就可以阻塞和唤醒线程，即使唤醒线程的`unpark()`在`park()`之前调用，也能正确唤醒指定的线程。
 
@@ -67,15 +55,11 @@ private static void parkTest() {
 }
 ```
 
-
-
 > LockSupport 将线程比喻为车，每个车都必须有一个`permit` 许可证，阻塞比喻为停车`park`，唤醒线程继续执行比喻为允许通行`unpark`，如果许可证为 1，则允许通过，如果为 0 则需要停车，通行一次会消耗掉 1 次许可证。
 
 LockSupport 使用了一种名为 `permit` （许可证）的概念来实现线程挂起和唤醒的功能，每个线程都有一个 `permit`（许可证），`permit` 只有两个值 `1` 和 `0`，默认为 0。可以将 `Permit`（许可证）看成是一种(0, 1)信号量 Semaphore，但与Semaphore不同的是， `Permit`许可证的累加上限是 1。
 
 我们可以将 `permit`看成为 1, 0 的开关，默认是0。调用一次`unpark`就 +1 变为 1，线程被许可通行继续执行，调用一次`park`就 -1 变为 0，线程立即被唤醒并继续执行。当然，如果再次调用`park`线程就会阻塞，一直等待到`permit`变为 1。需要注意`permit`最高上限为 1，即使多次调用`unpark`，
-
-
 
 对于`permit`上限为 1，下面这个例子，先调用了两次唤醒`unpark`，然后调用了两次挂起`park`，经过测试，线程 t1 只能被唤醒 1 次，第一次调用`park`将`permit`置为 0，第二次调用`park`自然无法通过，线程被阻塞挂起。
 
@@ -107,20 +91,15 @@ private static void parkTest2() {
 }
 ```
 
-
-
 当调用`park`方法时：
 
-- 如果有`permit`即为 1，则会直接消耗`permit`减 1，然后线程继续执行
-- 如果无`permit`即为 0，则会阻塞线程，等待`permit`为 1
+* 如果有`permit`即为 1，则会直接消耗`permit`减 1，然后线程继续执行
+* 如果无`permit`即为 0，则会阻塞线程，等待`permit`为 1
 
 当调用`unpark`方法时：
 
-- 如果无`permit`即为 0，则会将`permit`加 1
-
-- 如果有`permit`即为 1，则不会累加，`permit`最高为 1
-
-
+* 如果无`permit`即为 0，则会将`permit`加 1
+* 如果有`permit`即为 1，则不会累加，`permit`最高为 1
 
 > 面试题：为什么 LockSupport 可以先唤醒线程后阻塞线程？
 
@@ -130,11 +109,9 @@ private static void parkTest2() {
 
 因为许可证的数量最高为 1，连续调用两次unpark唤醒和调用一次效果一样，许可证为 1，而后面调用两次 park 阻塞线程，需要消耗两个许可证才能唤醒，所以线程最终还是阻塞状态。
 
+1. `LockSupport.park(blocker)`
 
-
-2. `LockSupport.park(blocker)`
-
-`LockSupport.park(blocker)`是线程被挂起前，将 `blocker` 保存到当前线程内部。我们使用 JConsole 或 jstack 观察线程被阻塞的原因，诊断工具就是通过调用``LockSupport.getBlocker(thread)`来获取 `blocker` 对象的，所以 JDK 推荐使用 `park(blocker)` 方法，并且将`blocker` 设置为 `this`，这样排查线程问题时就能知道是哪个对象导致线程阻塞了。后面的 `ReentrantLock`也是这样将线程挂起的。
+`LockSupport.park(blocker)`是线程被挂起前，将 `blocker` 保存到当前线程内部。我们使用 JConsole 或 jstack 观察线程被阻塞的原因，诊断工具就是通过调用\`\`LockSupport.getBlocker(thread)`来获取` blocker`对象的，所以 JDK 推荐使用`park(blocker) `方法，并且将`blocker`设置为`this`，这样排查线程问题时就能知道是哪个对象导致线程阻塞了。后面的` ReentrantLock\`也是这样将线程挂起的。
 
 ```java
 public void parkBlockTest() {
@@ -154,8 +131,6 @@ public void parkBlockTest() {
 使用`jstack pid`也可以看到导致线程阻塞的对象
 
 ![image-20210330064623466](精通Java并发学习笔记之AQS.assets/image-20210330064623466.png)
-
-
 
 `LockSupport.park(this)` ，当前线程被挂起前，会将 this 作为阻塞者保存到`Thread.parkBlocker`属性当中，这样遇到线程问题时，就可以知道是谁阻塞了当前线程。
 
@@ -178,10 +153,7 @@ private static void setBlocker(Thread t, Object arg) {
 }
 ```
 
-
-
-3. `Thread.interrupt`来发送一个中断信号通知线程停止，`Thread.interrupt`并不能真正的中断线程，而是「通知线程应该停止了」，具体到底停止还是继续运行，应该由**被通知的线程自己写代码处理**。
-
+1. `Thread.interrupt`来发送一个中断信号通知线程停止，`Thread.interrupt`并不能真正的中断线程，而是「通知线程应该停止了」，具体到底停止还是继续运行，应该由**被通知的线程自己写代码处理**。
 
 具体来说，当对一个线程，调用 interrupt() 时：
 
@@ -221,7 +193,7 @@ public static void waitInterruptTest() {
 
 收到中断信号后，会唤醒线程，抛出InterruptedException异常被 catch 并打印，然后线程继续执行，阻塞状态受到中断信号，jvm会复位中断标志位，所以这里打印的是 `fasle`
 
-```cmd
+```
 t1 thread begin wait...
 java.lang.InterruptedException
 	at java.lang.Object.wait(Native Method)
@@ -232,8 +204,6 @@ java.lang.InterruptedException
 false
 t1 thread continue  ...
 ```
-
-
 
 下面的代码演示当线程被`LockSupport.park()`阻塞挂起的时候，收到中断信号会唤醒线程继续执行：
 
@@ -258,21 +228,15 @@ public static void parkInterruptTest() {
 }
 ```
 
-```cmd
+```
 t1 thread begin park...
 true
 t1 thread continue  ...
 ```
 
-
-
 ReentrantLock 在将等待线程入队后，会将线程挂起。当线程被唤醒后，需要判断是被`unpark()`唤醒，还是被中断信号`interrupt`唤醒，所以会将中断信号传递出去`Thread.interrupted()`并清除中断标志位。
 
-
-
-
-
-## 1.3 LockSupport 源码分析
+### 1.3 LockSupport 源码分析
 
 这一章节并没有搞懂，摘抄了文章[LockSupport.park()实现分析](https://blog.csdn.net/hengyunabc/article/details/28126139)，
 
@@ -291,7 +255,7 @@ public static void unpark(Thread thread) {
 }
 ```
 
-2. 而 Unsafe 的 `park/unpark`方法都是 `native`方法，需要去
+1. 而 Unsafe 的 `park/unpark`方法都是 `native`方法，需要去
 
 ```java
 Unsafe.java
@@ -301,7 +265,7 @@ public native void unpark(Object var1);
 public native void park(boolean var1, long var2);
 ```
 
-3. 每个 java 线程都有一个 Parker 实例，[查看 Parker 类源码](https://github.com/AdoptOpenJDK/openjdk-jdk8u/blob/a1d853a5d797f38f7be8c260f4a83c1b3fe48adc/hotspot/src/share/vm/runtime/park.hpp) 如下所示：
+1. 每个 java 线程都有一个 Parker 实例，[查看 Parker 类源码](https://github.com/AdoptOpenJDK/openjdk-jdk8u/blob/a1d853a5d797f38f7be8c260f4a83c1b3fe48adc/hotspot/src/share/vm/runtime/park.hpp) 如下所示：
 
 ```cpp
 class Parker : public os::PlatformParker {
@@ -321,9 +285,7 @@ class PlatformParker : public CHeapObj<mtInternal> {
 }
 ```
 
-可以看到在Linux系统下，是用的 Posix 线程库 pthread 中的 `mutex`（互斥量），`condition`（条件变量）来实现的，`mutex`和`condition`保护了一个` _counter` 的变量来记录许可证数量 。 `mutex`（互斥量）是操作系统中的概念，参考《现代操作系统》 p75互斥量。
-
-
+可以看到在Linux系统下，是用的 Posix 线程库 pthread 中的 `mutex`（互斥量），`condition`（条件变量）来实现的，`mutex`和`condition`保护了一个 `_counter` 的变量来记录许可证数量 。 `mutex`（互斥量）是操作系统中的概念，参考《现代操作系统》 p75互斥量。
 
 当调用 park 时，先尝试直接能否直接拿到`许可证permit`，即`_counter>0`时，如果成功，则把`_counter`设置为0，并返回：
 
@@ -333,7 +295,7 @@ void Parker::park(bool isAbsolute, jlong time) {
     if (Atomic::xchg(0, &_counter) > 0) return;
 ```
 
-如果不成功，则构造一个ThreadBlockInVM，然后检查_counter是不是>0，如果是，则把_counter设置为0，unlock mutex并返回：
+如果不成功，则构造一个ThreadBlockInVM，然后检查\_counter是不是>0，如果是，则把\_counter设置为0，unlock mutex并返回：
 
 ```cpp
     ThreadBlockInVM tbivm(jt);
@@ -345,7 +307,7 @@ void Parker::park(bool isAbsolute, jlong time) {
     }
 ```
 
-否则，再判断等待的时间，然后再调用pthread_cond_wait函数等待，如果等待返回，则把_counter设置为0，unlock mutex并返回：
+否则，再判断等待的时间，然后再调用pthread\_cond\_wait函数等待，如果等待返回，则把\_counter设置为0，unlock mutex并返回：
 
 ```cpp
       if (time == 0) {
@@ -357,33 +319,23 @@ void Parker::park(bool isAbsolute, jlong time) {
       OrderAccess::fence();
 ```
 
-当unpark时，则简单多了，直接设置_counter为1，再unlock mutext返回。
+当unpark时，则简单多了，直接设置\_counter为1，再unlock mutext返回。
 
-简而言之，是用mutex和condition保护了一个_counter的变量，当park时，这个变量置为0，当unpark时，这个变量置为1。
+简而言之，是用mutex和condition保护了一个\_counter的变量，当park时，这个变量置为0，当unpark时，这个变量置为1。
 
-
-
-
-
-
-
-# 2. AQS 队列同步器
+## 2. AQS 队列同步器
 
 AQS （AbstractQueuedSynchronizer）抽象的队列同步器，作者是并发领域的大牛 Doug Lea ，AQS 构建了 ReentrantLock，ReentrantReadWriteLock，CountDownLatch，CyclicBarrier，Semaphore 等常见的锁和同步器，是用来构建锁或其他同步器的基础框架，也是整个 JUC 体系的基石。AQS 通过内置的 FIFO 队列来完成资源获取线程的排队工作，并通过一个 int 类型的变量表示持有锁的状态。
 
-
-
 > AQS 到底是什么？
 
-- 面试规则：群面、单面
-- 安排面试、排队，就坐、先来后到等 HR 的工作就是 AQS 做的工作
-- 面试官来规定面试规则，群面，单面，类似于 CountDownLatch，Semaphore
-- 面试官并不关心面试者的顺序，排队，等候就坐的问题，都交给 HR 去做
-- Semaphore：当一个人面试完以后，后一个人才能进来继续面试
-- CountDownLatch：当 10 个面试者到齐之后，才开始群面
-- Semaphore 和 CountDownLatch 要做的是写自己的"要人"规则，比如是“出一个进一个”，“10 人到齐，开始面试”
-
-
+* 面试规则：群面、单面
+* 安排面试、排队，就坐、先来后到等 HR 的工作就是 AQS 做的工作
+* 面试官来规定面试规则，群面，单面，类似于 CountDownLatch，Semaphore
+* 面试官并不关心面试者的顺序，排队，等候就坐的问题，都交给 HR 去做
+* Semaphore：当一个人面试完以后，后一个人才能进来继续面试
+* CountDownLatch：当 10 个面试者到齐之后，才开始群面
+* Semaphore 和 CountDownLatch 要做的是写自己的"要人"规则，比如是“出一个进一个”，“10 人到齐，开始面试”
 
 如果没有 AQS，就需要每个锁或同步工具自己实现：
 
@@ -392,15 +344,11 @@ AQS （AbstractQueuedSynchronizer）抽象的队列同步器，作者是并发�
 3. 等待队列的管理
 4. 通过 AQS，我们甚至可以自己实现一个并发工具
 
-
-
-## 2.1 AQS 的结构
+### 2.1 AQS 的结构
 
 AbstractQueuedSynchronizer 是 `java.util.concurrent.locks`下的抽象类，AQS 也是该包下 ReentrantLock 的底层实现，使用了**模板设计模式**。
 
 ![image-20210328022540097](精通Java并发学习笔记之AQS.assets/image-20210328022540097.png)
-
-
 
 AQS 内部有一个 FIFO 队列，用来保存请求资源的线程，`state`是一个 int 类型的变量，表示持有锁的状态，获取锁就是将`state`加 1，释放锁就是将`state`减 1，`state`为 0 则表示没有线程持有该锁。
 
@@ -412,19 +360,13 @@ AQS 内部有一个 FIFO 队列，用来保存请求资源的线程，`state`是
 2. FIFO 队列保存等待锁的线程
 3. 并发工具类自己去实现**获取锁，释放锁**等重要方法
 
-## 2.2 AQS 的应用
-
-
+### 2.2 AQS 的应用
 
 ![image-20210329155325813](精通Java并发学习笔记之AQS.assets/image-20210329155325813.png)
 
-
-
 ![image-20210328095350608](精通Java并发学习笔记之AQS.assets/image-20210328095350608.png)
 
-
-
-1. `ReentrantLock` 的源码如下所示，内部使用`Sync`来实现加锁和释放锁，公平锁`new ReentrantLock(true).lock()`获取锁的底层是调用 AQS 的 `acquire(1)`方法，`unlock()`释放锁的底层是调用 AQS 的 `release(1)`方法，ReentrantLock 的使用示例见[Github]()
+1. `ReentrantLock` 的源码如下所示，内部使用`Sync`来实现加锁和释放锁，公平锁`new ReentrantLock(true).lock()`获取锁的底层是调用 AQS 的 `acquire(1)`方法，`unlock()`释放锁的底层是调用 AQS 的 `release(1)`方法，ReentrantLock 的使用示例见[Github](精通Java并发学习笔记之AQS.md)
 
 ```java
 public class ReentrantLock implements Lock, Serializable {
@@ -466,7 +408,7 @@ public class ReentrantLock implements Lock, Serializable {
 
 ![image-20210329031122057](精通Java并发学习笔记之AQS.assets/image-20210329031122057.png)
 
-2. `ReentrantReadWriteLock`的源码如下所示，内部使用`Sync`来实现加锁和释放锁，其中读锁`ReadLock.lock()`获取锁的底层是调用 AQS 的 `acquireShared(1)`方法，`unlock()`释放锁的底层是调用 AQS 的 `release(1)`方法，ReentrantReadWriteLock 的使用示例见[Github]()
+1. `ReentrantReadWriteLock`的源码如下所示，内部使用`Sync`来实现加锁和释放锁，其中读锁`ReadLock.lock()`获取锁的底层是调用 AQS 的 `acquireShared(1)`方法，`unlock()`释放锁的底层是调用 AQS 的 `release(1)`方法，ReentrantReadWriteLock 的使用示例见[Github](精通Java并发学习笔记之AQS.md)
 
 ```java
 private final ReentrantReadWriteLock.ReadLock readerLock;
@@ -495,9 +437,7 @@ public static class ReadLock implements Lock, Serializable {
 }
 ```
 
-
-
-3. `CountDownLatch`的源码如下所示，内部使用`Sync`来实现，其中`countDown()`的底层是调用 AQS 的 `releaseShared(1)`方法，`await()`释放锁的底层是调用 AQS 的 `acquireSharedInterruptibly(1)`方法，CountDownLatch 的使用示例见[Github]()
+1. `CountDownLatch`的源码如下所示，内部使用`Sync`来实现，其中`countDown()`的底层是调用 AQS 的 `releaseShared(1)`方法，`await()`释放锁的底层是调用 AQS 的 `acquireSharedInterruptibly(1)`方法，CountDownLatch 的使用示例见[Github](精通Java并发学习笔记之AQS.md)
 
 ```java
 private final Sync sync;
@@ -530,28 +470,18 @@ private static final class Sync extends AbstractQueuedSynchronizer {
 }
 ```
 
-
-
 经过以上 3 个并发类的源码分析，底层都是使用 AQS 来进行锁的获取与释放，而且 `CyclicBarrier`和`Semaphore`底层也是使用 AQS，故我们称 AQS 是构建锁或同步器的基础框架。
-
-
 
 **Lock 和 AQS**
 
-- Lock 锁是面向锁的使用者，定义了锁的 api 接口，包括获取锁，释放锁等，程序员写业务代码时使用
-- AQS 同步器是面向锁的实现着，规范并简化了锁的实现，屏蔽了同步状态管理，阻塞线程排队，通知唤醒机制等。如果想自己定义一个锁，就可以使用 AQS 来实现
+* Lock 锁是面向锁的使用者，定义了锁的 api 接口，包括获取锁，释放锁等，程序员写业务代码时使用
+* AQS 同步器是面向锁的实现着，规范并简化了锁的实现，屏蔽了同步状态管理，阻塞线程排队，通知唤醒机制等。如果想自己定义一个锁，就可以使用 AQS 来实现
 
-
-
-## 2.3 AQS 的实现原理
+### 2.3 AQS 的实现原理
 
 抢到资源的线程直接处理业务逻辑，抢不到资源的线程必然涉及一种**排队等待机制**，抢占资源失败的线程继续等待，类似于银行业务办理窗口都满了只能去候客区等待，但等待线程仍然保留获取锁的可能，且获取锁的流程仍在继续，类似于候客区的客户也在等待叫号去窗口办理业务。
 
-
-
 AQS 中使用 CLH 队列来保存排队线程，暂时获取不到锁的线程都将加入这个队列中，它将请求共享资源的线程被封装为队列的**结点（Node）**，通过 CAS，自旋的方式，维护`state`变量的状态，使用`state`来判断是否阻塞，使用 `LockSupport.park()/unpark(thread)`来阻塞唤醒线程，使得达到同步的控制效果。
-
-
 
 1. AQS 使用一个`volatile`的`int`类型变量`state`来表示同步状态，可以通过`getstate` `setState` `compareAndSetState`方法修改。对于`ReentrantLock`，`state`可以表示当前线程获取锁的可重入次数；对于`ReentrantReadWriteLock`，`state`的高 16 位表示读锁的状态，也就是获取该读锁的次数；低 16 位表示获取到血锁的线程的可重入次数；对于`CountDownLatch`，`state`表示计数器当前值；对于`Semaphore`，`state`表示可用信号的个数
 
@@ -588,9 +518,7 @@ private final boolean compareAndSetTail(Node expect, Node update) {
 
 ![image-20210328095121928](精通Java并发学习笔记之AQS.assets/image-20210328095121928.png)
 
-
-
-2. CLH 队列，一个节点 Node 表示一个线程，它保存着线程的引用（thread）、状态（waitStatus）、前驱节点（prev）、后继节点（next），队列中排队线程的状态（waitStatus），线程的状态共有 4 中类型 CANCELLED，SIGNAL，CONDITION，PROPAGATE，Node 源码如下：
+1. CLH 队列，一个节点 Node 表示一个线程，它保存着线程的引用（thread）、状态（waitStatus）、前驱节点（prev）、后继节点（next），队列中排队线程的状态（waitStatus），线程的状态共有 4 中类型 CANCELLED，SIGNAL，CONDITION，PROPAGATE，Node 源码如下：
 
 ```java
 static final class Node {
@@ -649,9 +577,7 @@ static final class Node {
 
 Node 的 4 种状态再参考《Java并发编程的艺术 p124》和《Java并发编程之美 p122》
 
-
-
-# 3. ReentrantLock 源码分析
+## 3. ReentrantLock 源码分析
 
 三个用户 A B C 来办理业务，但是同时最多只能有一个用户办理业务，我们使用 3 个线程来模拟 3 个用户，使用 ReentrantLock 非公平锁来控制锁的的抢占。
 
@@ -703,8 +629,6 @@ public static void main(String[] args) {
 }
 ```
 
-
-
 主要分析两个过程：加锁和释放锁
 
 ```java
@@ -726,29 +650,25 @@ public class ReentrantLock implements Lock, Serializable {
     }
 ```
 
-## 3.1 获取锁过程 acquire
+### 3.1 获取锁过程 acquire
 
-![image-20210401070538319](精通Java并发学习笔记之AQS.assets/image-20210401070538319.png)
+![image-20210401070538319](精通Java并发学习笔记之AQS.assets/image-20210401070525173.png)
 
 获取锁有 8 个重要方法
 
-- `lock()`
-- `acquire()`
-- `tryAcquire()`
-- `nonfairTryAcquire()`
-- `addWaiter()`：将节点node加入等待队列尾部
-- `enq(Node node)`：通过死循环来保证节点的正确添加，只有通过 CAS 将节点设置为尾结点后才能从该方法返回
-- `acquireQueued()` ：节点以“死循环”的方式获取锁，如果获取不到则阻塞线程，被阻塞的线程主要靠前驱节点的出队来实现
-- `shouldParkAfterFailedAcquire(p, node)` 
-- `parkAndCheckInterrupt()`
-
-
-
-
+* `lock()`
+* `acquire()`
+* `tryAcquire()`
+* `nonfairTryAcquire()`
+* `addWaiter()`：将节点node加入等待队列尾部
+* `enq(Node node)`：通过死循环来保证节点的正确添加，只有通过 CAS 将节点设置为尾结点后才能从该方法返回
+* `acquireQueued()` ：节点以“死循环”的方式获取锁，如果获取不到则阻塞线程，被阻塞的线程主要靠前驱节点的出队来实现
+* `shouldParkAfterFailedAcquire(p, node)`
+* `parkAndCheckInterrupt()`
 
 1. 非公平锁获取锁，
-   - 如果`state`为 0，则说明当前锁未被占用，则尝试修改`state`为 1；
-   - 若修改失败，则使用 AQS 尝试获取锁
+   * 如果`state`为 0，则说明当前锁未被占用，则尝试修改`state`为 1；
+   * 若修改失败，则使用 AQS 尝试获取锁
 
 ```java
 ReentrantLock.NonfairSync.java
@@ -774,7 +694,7 @@ static final class NonfairSync extends Sync {
 }
 ```
 
-2. 使用 AQS 尝试获取锁，如果获取失败则将当前线程加入等待队列
+1. 使用 AQS 尝试获取锁，如果获取失败则将当前线程加入等待队列
 
 ```java
 AbstractQueuedSynchronizer.java
@@ -794,10 +714,10 @@ public final void acquire(int arg) {
 }
 ```
 
-3. 尝试获取锁底层会使用非公平锁同步器，这里的`state`表示可重入计数，当为 0 时表示锁不被任何线程占有
-   - 如果`state`为 0，则说明当前锁未被占用，直接修改`state`为1获取这把锁
-   - 如果`state`不为 0，因为 ReentrantLock 是可重入锁，判断拥有该锁的线程是否为当前线程；如果是则将`state`加1，如果不是则获取锁失败
-   - 在上一层`NonfairSync.lock()`已经检查了`stat`不为 0，所以 CAS 失败，使用 AQS 尝试获取锁，如果执行到，恰好那个线程释放了锁，则当前线程不排队直接获取锁，这也是叫非公平锁的原因, 优点是避免了线程的挂起和唤醒
+1. 尝试获取锁底层会使用非公平锁同步器，这里的`state`表示可重入计数，当为 0 时表示锁不被任何线程占有
+   * 如果`state`为 0，则说明当前锁未被占用，直接修改`state`为1获取这把锁
+   * 如果`state`不为 0，因为 ReentrantLock 是可重入锁，判断拥有该锁的线程是否为当前线程；如果是则将`state`加1，如果不是则获取锁失败
+   * 在上一层`NonfairSync.lock()`已经检查了`stat`不为 0，所以 CAS 失败，使用 AQS 尝试获取锁，如果执行到，恰好那个线程释放了锁，则当前线程不排队直接获取锁，这也是叫非公平锁的原因, 优点是避免了线程的挂起和唤醒
 
 ```java
 ReentrantLock.Sync.java
@@ -844,11 +764,11 @@ abstract static class Sync extends AbstractQueuedSynchronizer {
 }
 ```
 
-4. 第 2 步如果 AQS `tryAcquire`尝试获取锁失败，则将当前线程封装为 node 加入等待队列
-   - node 的类型为 EXCLUSIVE，即独占锁，node 保存了当前线程的引用
-   - 如果队列尾指针 tail 不为 null，则说明队列不为空，直接将 node入队设置为最后一个节点
-   - 如果 node 在 CAS 入队时恰好有其他线程也在入队，导致 CAS 失败，则也使用`enq(node)`自旋将 node 入队
-   - 如果队列尾指针 tail 为 null，则说明队列为空，创建队列并入队
+1. 第 2 步如果 AQS `tryAcquire`尝试获取锁失败，则将当前线程封装为 node 加入等待队列
+   * node 的类型为 EXCLUSIVE，即独占锁，node 保存了当前线程的引用
+   * 如果队列尾指针 tail 不为 null，则说明队列不为空，直接将 node入队设置为最后一个节点
+   * 如果 node 在 CAS 入队时恰好有其他线程也在入队，导致 CAS 失败，则也使用`enq(node)`自旋将 node 入队
+   * 如果队列尾指针 tail 为 null，则说明队列为空，创建队列并入队
 
 ```java
 AbstractQueuedSynchronizer.java
@@ -881,10 +801,10 @@ private Node addWaiter(Node mode) {
 }
 ```
 
-5. 将节点 node 入队
-   - 如果队列为空，则创建一个傀儡节点`new Node()`作为头节点 head
-   - 如果队列不为空，则将节点 node CAS 入队
-   - 如果入队时恰好有其他线程也在执行入队操作，导致当前线程node CAS 入队失败，则自旋直至 CAS 成功将当前线程node加入队列
+1. 将节点 node 入队
+   * 如果队列为空，则创建一个傀儡节点`new Node()`作为头节点 head
+   * 如果队列不为空，则将节点 node CAS 入队
+   * 如果入队时恰好有其他线程也在执行入队操作，导致当前线程node CAS 入队失败，则自旋直至 CAS 成功将当前线程node加入队列
 
 ```java
 AbstractQueuedSynchronizer.java
@@ -923,42 +843,34 @@ private Node enq(final Node node) {	// final的作用?
 }
 ```
 
-
-
 `enq(node)`入队的操作分为以下 3 个步骤：
 
 1. 初始化等待队列，创建傀儡结点，修改队列的头指针head和尾指针tail
 
 ![image-20210329122319720](精通Java并发学习笔记之AQS.assets/image-20210329122319720.png)
 
-2. 将尝试获取锁失败的线程 ThreadB 加入队列，修改队列的尾指针 tail
+1. 将尝试获取锁失败的线程 ThreadB 加入队列，修改队列的尾指针 tail
 
 ![image-20210329121952062](精通Java并发学习笔记之AQS.assets/image-20210329121952062.png)
 
-3. 将尝试获取锁失败的线程 ThreadC 加入队列，修改队列的尾指针 tail
+1. 将尝试获取锁失败的线程 ThreadC 加入队列，修改队列的尾指针 tail
 
 ![image-20210329121810657](精通Java并发学习笔记之AQS.assets/image-20210329121810657.png)
 
+1. node 入队后，将当前线程挂起
+   1.  若node不是队首元素, 则应该挂起当前线程
 
+       若 A 线程正在占有锁，B线程抢占锁失败已经入队，C 线程尝试抢占锁的情况。第 1 次 for 循环中，由于 C 节点的前驱节点是 B 节点，不是 head 傀儡节点，所以当前线程 C 直接被挂起阻塞
 
-6. node 入队后，将当前线程挂起
-   1. 若node不是队首元素, 则应该挂起当前线程
+       ![image-20210329125014078](精通Java并发学习笔记之AQS.assets/image-20210329125014078.png)
+   2.  若node是队首元素，则尝试获取锁，若获取锁成功, 那么说明当前node应该出队
 
-      若 A 线程正在占有锁，B线程抢占锁失败已经入队，C 线程尝试抢占锁的情况。第 1 次 for 循环中，由于 C 节点的前驱节点是 B 节点，不是 head 傀儡节点，所以当前线程 C 直接被挂起阻塞
+       A 线程刚刚释放了锁，B线程抢占锁成功的情况。在第 1 次 for 循环中，由于 B 节点的前驱节点是 head，所以线程 B 尝试获取锁，因为锁已经被 A 释放，则获取成功，所以将当前节点 B 设置为头节点 head，并清除其保存的当前线程 B，然后 return 退出 for 循环。
+   3.  若node是队首元素，则尝试获取锁，若获取锁失败, 则应该挂起当前线程
 
-      ![image-20210329125014078](精通Java并发学习笔记之AQS.assets/image-20210329125014078.png)
+       若 A 线程正在占有锁，B线程尝试抢占锁失败的情况。在第 1 次 for 循环中，由于 B 节点的前驱节点是 head，所以线程 B 尝试获取锁，因为锁被 A 占有，则获取失败，然后将 B 节点的前驱节点状态 waitStatus 修改为 SIGNAL；在第 2 次 for 循环中，尝试获取锁依然失败，由于将 B 节点的前驱节点状态 waitStatus 修改为 SIGNAL，标志线程 B 等待被唤醒，所以当前线程 C 直接被挂起阻塞
 
-   2. 若node是队首元素，则尝试获取锁，若获取锁成功, 那么说明当前node应该出队
-
-      A 线程刚刚释放了锁，B线程抢占锁成功的情况。在第 1 次 for 循环中，由于 B 节点的前驱节点是 head，所以线程 B 尝试获取锁，因为锁已经被 A 释放，则获取成功，所以将当前节点 B 设置为头节点 head，并清除其保存的当前线程 B，然后 return 退出 for 循环。
-
-      
-
-   3. 若node是队首元素，则尝试获取锁，若获取锁失败, 则应该挂起当前线程
-
-      若 A 线程正在占有锁，B线程尝试抢占锁失败的情况。在第 1 次 for 循环中，由于 B 节点的前驱节点是 head，所以线程 B 尝试获取锁，因为锁被 A 占有，则获取失败，然后将 B 节点的前驱节点状态 waitStatus 修改为 SIGNAL；在第 2 次 for 循环中，尝试获取锁依然失败，由于将 B 节点的前驱节点状态 waitStatus 修改为 SIGNAL，标志线程 B 等待被唤醒，所以当前线程 C 直接被挂起阻塞
-
-      ![image-20210329124327379](精通Java并发学习笔记之AQS.assets/image-20210329124327379.png)
+       ![image-20210329124327379](精通Java并发学习笔记之AQS.assets/image-20210329124327379.png)
 
 ```java
 AbstractQueuedSynchronizer.java
@@ -1019,12 +931,12 @@ private void setHead(Node node) {
 
 ![image-20210329124327379](精通Java并发学习笔记之AQS.assets/image-20210329124327379.png)
 
-7. 使用 `LockSupport.park()`将当前线程挂起阻塞
-   - B 线程第一次进入，将前驱节点 head 的`waitStatus`修改为SIGNAL=-1，返回false，
-   - B 线程第二次进入，返回 true，表示当前线程可以被挂起
-   - C 线程第一次进入，将前驱节点 B 的`waitStatus`修改为SIGNAL=-1，返回false
-   - C 线程第二次进入，返回 true，表示当前线程可以被挂起
-   - 当前线程释放锁后，通过 head 的`waitStatus<0`来判断队列中是否有需要被唤醒的线程
+1. 使用 `LockSupport.park()`将当前线程挂起阻塞
+   * B 线程第一次进入，将前驱节点 head 的`waitStatus`修改为SIGNAL=-1，返回false，
+   * B 线程第二次进入，返回 true，表示当前线程可以被挂起
+   * C 线程第一次进入，将前驱节点 B 的`waitStatus`修改为SIGNAL=-1，返回false
+   * C 线程第二次进入，返回 true，表示当前线程可以被挂起
+   * 当前线程释放锁后，通过 head 的`waitStatus<0`来判断队列中是否有需要被唤醒的线程
 
 ```java
 AbstractQueuedSynchronizer.java
@@ -1069,9 +981,7 @@ private final boolean parkAndCheckInterrupt() {
 }
 ```
 
-
-
-## 3.2 中断信号的传递
+### 3.2 中断信号的传递
 
 上面获取锁的过程中，有对中断信号的传递，虽然不是重点，但是还是搞清楚更爽，源码分析如下：
 
@@ -1124,18 +1034,11 @@ private final boolean parkAndCheckInterrupt() {
 static void selfInterrupt() {
     Thread.currentThread().interrupt();
 }
-
 ```
 
+### 3.3 释放锁过程 release
 
-
-
-
-## 3.3 释放锁过程 release
-
-
-
-1. ReentrantLock 释放锁会直接调用 AQS  的 `release()` 方法
+1. ReentrantLock 释放锁会直接调用 AQS 的 `release()` 方法
 
 ```java
 ReentrantLock.java
@@ -1165,7 +1068,7 @@ public final boolean release(int arg) {
 }
 ```
 
-2. 尝试释放锁`tryRelease()`与尝试获取锁`tryAcquire()`相对应，就是将 AQS 同步器的`state`值减 1
+1. 尝试释放锁`tryRelease()`与尝试获取锁`tryAcquire()`相对应，就是将 AQS 同步器的`state`值减 1
 
 ```java
 ReentrantLock.Sync.java
@@ -1197,7 +1100,7 @@ protected final boolean tryRelease(int releases) {
 
 ![image-20210329140141512](精通Java并发学习笔记之AQS.assets/image-20210329140141512.png)
 
-3. 线程 B 挂起等待时会将等待队列 head 节点的 waitStatus 设置为 -1，线程 A 释放锁，会通过`head.waitStatus<0`来判断队列中是否有需要被唤醒的线程，head 的后继节点为 B，则不会进入代码1，直接进入代码2，使用 `LockSupport.unpark(threadB)`唤醒线程 B
+1. 线程 B 挂起等待时会将等待队列 head 节点的 waitStatus 设置为 -1，线程 A 释放锁，会通过`head.waitStatus<0`来判断队列中是否有需要被唤醒的线程，head 的后继节点为 B，则不会进入代码1，直接进入代码2，使用 `LockSupport.unpark(threadB)`唤醒线程 B
 
 ```java
 // 方法2.2, 唤醒队列中阻塞等待的线程。
@@ -1229,11 +1132,10 @@ private void unparkSuccessor(Node node) {
 }
 ```
 
-3.  上一步当线程 A 释放了锁之后，会唤醒等待队列中的第一个线程 B。
+1. 上一步当线程 A 释放了锁之后，会唤醒等待队列中的第一个线程 B。
 
-   - 线程B被唤醒后继续执行新一轮 for 循环，因为节点 B 的前置节点为 head，然后尝试获取锁`tryAcquire(1)`，因为当前锁已经被线程 A 释放，所以获取锁成功。
-
-   - 然后节点 B 进行出队操作，设置节点 B 为头结点 head，清除节点 B 中保存的线程信息。至此，节点 B 出队结束，线程 B 继续执行自己的同步业务代码。
+* 线程B被唤醒后继续执行新一轮 for 循环，因为节点 B 的前置节点为 head，然后尝试获取锁`tryAcquire(1)`，因为当前锁已经被线程 A 释放，所以获取锁成功。
+* 然后节点 B 进行出队操作，设置节点 B 为头结点 head，清除节点 B 中保存的线程信息。至此，节点 B 出队结束，线程 B 继续执行自己的同步业务代码。
 
 ```java
 final boolean acquireQueued(final Node node, int arg) {
@@ -1272,13 +1174,9 @@ final boolean acquireQueued(final Node node, int arg) {
 
 ![image-20210329140316039](精通Java并发学习笔记之AQS.assets/image-20210329140316039.png)
 
+![image-20210329111132273](精通Java并发学习笔记之AQS.assets/image-20210329111133908.png)
 
-
-
-
-![image-20210329111132273](精通Java并发学习笔记之AQS.assets/image-20210329111132273.png)
-
-## 3.4 公平锁的抢占原理
+### 3.4 公平锁的抢占原理
 
 当线程 A 释放锁后，打算唤醒等待队列中第一个线程 B，此时恰好进来一个线程 X，此时有两种选择：
 
@@ -1313,33 +1211,21 @@ protected final boolean tryAcquire(int acquires) {
 }
 ```
 
-
-
 摘抄《Java并发编程的艺术 p140》：
 
-**测试场景：**10个线程，每个线程获取 100000 次锁，通过 vmstat 统计测试运行时线程上下文切换次数。
+\*\*测试场景：\*\*10个线程，每个线程获取 100000 次锁，通过 vmstat 统计测试运行时线程上下文切换次数。
 
 测试结果：公平锁耗时是非公平锁的 94 倍，总切换次数是其 133 倍，可以看出，公平锁保证了锁的获取按照 FIFO 原则，避免了饥饿，但代价是进行了大量的线程切换；非公平锁虽然可能造成线程饥饿，但极少的线程切换，保证了其最大的吞吐量。
 
+## 6. 实战：AQS 实现一次性门闩
 
-
-
-
-
-
-# 6. 实战：AQS 实现一次性门闩
-
-**一次性门闩：**默认关闭，所有线程调`await()`用都会进入等待阻塞状态，直至有一个线程调用 `signal()`将门闩打开，那么将唤醒之前阻塞的所有线程，而且这个门闩是一次性的，之后所有调用`await()`的线程会直接继续执行。
+\*\*一次性门闩：\*\*默认关闭，所有线程调`await()`用都会进入等待阻塞状态，直至有一个线程调用 `signal()`将门闩打开，那么将唤醒之前阻塞的所有线程，而且这个门闩是一次性的，之后所有调用`await()`的线程会直接继续执行。
 
 一次性门闩我们使用 AQS 负责线程的挂起，入队，唤醒等操作，AQS 的用法如下所示：
 
 ![image-20210330023715466](精通Java并发学习笔记之AQS.assets/image-20210330023715466.png)
 
-
-
-## 6.1 实现 OneShotLatch
-
-
+### 6.1 实现 OneShotLatch
 
 根据一次性门闩`OneShotLatch`的特性，明显是多个线程可以获取锁（即继续执行的资格），所以是共享锁，我们实现`tryAcquireShared()`方法，通过判断`state`的值，来判断当前线程是否有通行资格，若门闩关闭，`state=0`，则线程阻塞等待，若门闩打开，`state=1`，则线程继续执行。
 
@@ -1393,8 +1279,6 @@ public class OneShotLatch {
 }
 ```
 
-
-
 一次性门闩 OneShotLatch 的线程等待入队，唤醒线程的操作都由 AQS 实现，源码如下所示：
 
 ```java
@@ -1422,11 +1306,7 @@ public final boolean releaseShared(int arg) {
 }
 ```
 
-
-
-
-
-## 6.2 使用 OneShotLatch
+### 6.2 使用 OneShotLatch
 
 使用一次性门闩模拟禁行操作，当前道路正在施工，所有司机线程过来都需要等待，当施工完毕，交警线程打开门闩，放行所有司机线程，后面有新的司机线程过来，也不需要等待直接通过。
 
@@ -1485,11 +1365,7 @@ public static void main(String[] args) throws InterruptedException {
 线程10被唤醒，继续执行业务逻辑....
 ```
 
-
-
-
-
-## 6.3 OneShotLatch 源码分析
+### 6.3 OneShotLatch 源码分析
 
 通过前面 ReentrantLock 的源码分析，我们知道当线程A释放锁后，会通知唤醒队列中的第一个线程B，并将该节点B置为头结点head，清除其保存的线程B，然后继续执行线程B的业务逻辑
 
@@ -1529,11 +1405,7 @@ private void setHead(Node node) {
 }
 ```
 
-
-
 > OneShotLatch 当打开门闩`signal()`之后，是如何唤醒所有等待线程的呢？
-
-
 
 1. OneShotLatch 释放锁最终会调用 AQS 的`doReleaseShared()`方法，该方法会唤醒等待队列中第一个线程
 
@@ -1565,7 +1437,7 @@ private void doReleaseShared() {
 }
 ```
 
-2. 第一个等待线程被唤醒后，会`tryAcquireShared`尝试获取锁，若获取成功，则将当前节点置为头结点head，然后唤醒当前节点的后驱节点，即队列中第二个等待唤醒的线程
+1. 第一个等待线程被唤醒后，会`tryAcquireShared`尝试获取锁，若获取成功，则将当前节点置为头结点head，然后唤醒当前节点的后驱节点，即队列中第二个等待唤醒的线程
 
 ```java
 AbstractQueuedSynchronizer.java
@@ -1610,7 +1482,7 @@ private void doAcquireShared(int arg) {
 }
 ```
 
-3. 唤醒第二个等待线程
+1. 唤醒第二个等待线程
    1. 首先将当前节点设置为头节点，并清除其保存的线程，此时原队列第二个等待唤醒线程节点 s 已经排到了第一个
    2. 然后执行唤醒操作`doReleaseShared()`，该方法就是步骤一，会唤醒队列中第一个等待线程 s，即原队列第二个等待线程 s
    3. 依次循环，就可以唤醒队列中所有线程
@@ -1640,29 +1512,25 @@ private void setHeadAndPropagate(Node node, int propagate) {
 }
 ```
 
-
-
 经过以上源码分析，我们知道 OneShotLatch 会唤醒队列第一个等待线程，第一个等待线程被唤醒后出队，然后第一个等待线程会去唤醒第二个等待线程，依次循环，就可以唤醒队列中所有的等待线程。
 
+## 补充
 
-
-# 补充
-
-## ReentrantReadWriteLock 源码分析
+### ReentrantReadWriteLock 源码分析
 
 ReadLock 是共享锁，可以多次获取，非公平锁时，读锁仅在等待队列头部不是请求写锁的线程时可以插队；如果等待队列头部是请求读锁，而当目前持有写锁的线程恰好释放写锁是，则新来的读线程会插队获得读锁，这点与非公平锁选择接受新线程而不去唤醒等待线程出策略一致
 
-## Condition 源码分析
+### Condition 源码分析
 
 有条件队列
 
 // 补充, 参考并发编程艺术p150, 并发编程之美p128
 
-## CyclicBarrier 源码分析
+### CyclicBarrier 源码分析
 
 这个底层是 ReentrantLock 不是 AQS
 
-## Semaphore 源码分析
+### Semaphore 源码分析
 
 获取锁操作依赖state变量, 获取不到则阻塞当前线程
 
@@ -1670,40 +1538,22 @@ Semaphore 获取就是acquire方法, 作用是获取一个许可证
 
 CountDownLatch 获取就是 await方法, 作用是等待直至倒数结束
 
-
-
 释放锁操作依赖state变量, 唤醒阻塞线程
 
 Semaphore 释放就是release方法, 作用是释放一个许可证
 
 CountDownLatch释放就是countDown方法,作用是倒数一个数
 
-
-
-
-
-# 并发编程案例
+## 并发编程案例
 
 1. Java并发编程的艺术 p106：使用线程池实现数据库连接池和 Web 服务器
-
 2. Java高薪训练营-极客时间：使用多线程实现百万订单的并发处理。使用线程池优化订单处理的设计实现。使用并发容器改进订单的并发处理效率。
 3. Java并发编程实战 - 极客时间：高性能网络应用框架Netty，高性能队列Disruptor，高性能数据库连接池 HikariCP
 
-
-
-
-
-
-
-
-
-# 参考文档
+## 参考文档
 
 1. [Java面试题第三季之AQS - 周阳](https://www.bilibili.com/video/BV1Hy4y1B78T?p=16)
-2. [Java并发编程的艺术]()  p146
-3. [Java并发编程之美 - 第6章]() 
+2. [Java并发编程的艺术](精通Java并发学习笔记之AQS.md) p146
+3. [Java并发编程之美 - 第6章](精通Java并发学习笔记之AQS.md)
 4. [AQS 同步框架 - Doug Lea](http://gee.cs.oswego.edu/dl/papers/aqs.pdf)
 5. [AQS 同步框架中文版 - Doug Lea](http://ifeve.com/aqs/)
-
-
-
