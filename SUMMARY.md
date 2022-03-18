@@ -1,8 +1,8 @@
 # Table of contents
 
 * [笔记](README.md)
+  * [目录](readme/\_sidebar.md)
 * [JUC](docs/README.md)
-  * [目录](docs/\_sidebar.md)
   * [总览](docs/精通Java鬓发学习笔记之总览并发工具.md)
   * [锁](docs/精通Java并发学习笔记之锁.md)
   * [并发容器](docs/精通Java并发学习笔记之并发集合.md)
